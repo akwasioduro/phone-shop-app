@@ -41,7 +41,7 @@ jobs:
             # Go to the target directory where files were deployed
             cd ${{ secrets.TARGET_DIR }}
 
-            # Remove existing contents of /var/www/html
+            # Remove existing contents of /var/www/html.
             sudo rm -rf /var/www/html/*
 
             # Move new files to /var/www/html
