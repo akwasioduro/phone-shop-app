@@ -39,7 +39,7 @@ jobs:
             sudo systemctl enable apache2
             cd home
             
-           # Remove existing contents of /var/www/html
+           # Remove existing contents of /var/www/html...
             sudo rm -rf /var/www/html/*
            
             # Move new files to /var/www/html
