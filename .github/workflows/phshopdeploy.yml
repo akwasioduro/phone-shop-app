@@ -31,16 +31,18 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             sudo apt-get -y update
-            
-            #Install Apache web server for launching the application
+
+            # Install Apache web server
             sudo apt-get install -y apache2
-            sudo systemctl daemon-reload
+            sudo systemctl daemon-reexec
             sudo systemctl start apache2
             sudo systemctl enable apache2
-            cd home
-            
-           # Remove existing contents of /var/www/html.
+
+            # Go to the target directory where files were deployed
+            cd ${{ secrets.TARGET_DIR }}
+
+            # Remove existing contents of /var/www/html
             sudo rm -rf /var/www/html/*
-           
+
             # Move new files to /var/www/html
             sudo mv * /var/www/html
