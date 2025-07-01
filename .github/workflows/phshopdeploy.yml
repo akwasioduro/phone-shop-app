@@ -1,48 +1,59 @@
-name: Deploy to EC2
+name: Build and Push to AWS ECR, then deploy to ECS Fargate
 
 on:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'docs/**'
+      - 'readme.md'
 
 jobs:
   deploy:
-    environment: prod
-    name: Deploy to EC2
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout the files
-        uses: actions/checkout@v4
+    - name: Checkout Code
+      uses: actions/checkout@v4
 
-      - name: Deploy to EC2 Server
-        uses: easingthemes/ssh-deploy@main
-        with:
-          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-          REMOTE_HOST: ${{ secrets.HOST_DNS }}
-          REMOTE_USER: ${{ secrets.EC2_USER }}
-          TARGET: ${{ secrets.TARGET_DIR }}
+    - name: Set up AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Executing remote ssh commands using ssh key
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.HOST_DNS }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            sudo apt-get -y update
+    - name: Log in to Amazon ECR
+      uses: aws-actions/amazon-ecr-login@v2
 
-            # Install Apache web server
-            sudo apt-get install -y apache2
-            sudo systemctl daemon-reexec
-            sudo systemctl start apache2
-            sudo systemctl enable apache2
+    - name: Build Docker image
+      id: build-image
+      run: |
+        docker build -t ${{ secrets.ECR_REPOSITORY_URI }}:latest .
 
-            # Go to the target directory where files were deployed
-            cd ${{ secrets.TARGET_DIR }}
+    - name: Tag Docker image
+      run: |
+        docker tag ${{ secrets.ECR_REPOSITORY_URI }}:latest ${{ secrets.ECR_REPOSITORY_URI }}:latest
 
-            # Remove existing contents of /var/www/html
-            sudo rm -rf /var/www/html/*
+    - name: Push Docker image to Amazon ECR
+      run: |
+        docker push ${{ secrets.ECR_REPOSITORY_URI }}:latest
 
-            # Move new files to /var/www/html
-            sudo mv * /var/www/html
+    - name: Fill in the new image ID in the Amazon ECS task definition
+      id: task-def
+      uses: aws-actions/amazon-ecs-render-task-definition@v1
+      with:
+        task-definition: ./task-definition.json
+        container-name: ${{ secrets.CONTAINER_NAME }} 
+        image: ${{ secrets.ECR_REPOSITORY_URI }}:latest
+
+    - name: Debug Rendered Task Definition
+      run: cat ${{ steps.task-def.outputs.task-definition }}  
+      
+    - name: Deploy Amazon ECS task definition
+      uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+      with:
+        task-definition: ${{ steps.task-def.outputs.task-definition }}
+        service: ${{ secrets.ECS_SERVICE }}
+        cluster: ${{ secrets.ECS_CLUSTER }}
+        wait-for-service-stability: true
