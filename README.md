@@ -15,10 +15,9 @@ A complete DevOps implementation showcasing containerization, automated CI/CD pi
 - [Infrastructure Components](#infrastructure-components)
 - [CI/CD Pipeline](#cicd-pipeline)
 - [Docker Configuration](#docker-configuration)
-- [AWS Infrastructure Setup](#aws-infrastructure-setup)
-- [Deployment Guide](#deployment-guide)
+- [ECS Task Definition](#ecs-task-definition)
+- [Deployment Workflow](#deployment-workflow)
 - [Monitoring & Logging](#monitoring--logging)
-- [Security Best Practices](#security-best-practices)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -29,51 +28,53 @@ This project demonstrates a complete DevOps workflow for deploying a containeriz
 
 ### Key DevOps Capabilities Demonstrated
 
-- **Containerization**: Docker-based application packaging with nginx
+- **Containerization**: Docker-based application packaging with nginx:alpine
 - **CI/CD Automation**: GitHub Actions workflow for build, test, and deploy
 - **Container Registry**: AWS ECR for secure image storage
 - **Serverless Orchestration**: AWS ECS Fargate for container management
 - **Infrastructure as Code**: JSON-based ECS task definitions
 - **Automated Deployments**: Zero-downtime rolling deployments
-- **Logging & Monitoring**: CloudWatch integration for observability
-- **Security**: IAM roles, secrets management, and least privilege access
+- **Logging**: CloudWatch Logs integration for observability
+- **Security**: IAM roles and GitHub Secrets management
 
 ---
 
 ## 🏗️ Architecture
 
-### High-Level Architecture Diagram
+### Deployment Flow
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                     DEVELOPER WORKFLOW                        │
 └──────────────────────────────────────────────────────────────┘
                               │
-                              │ git push
+                              │ git push to main
                               ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                      GITHUB REPOSITORY                        │
 │  ┌────────────────────────────────────────────────────────┐  │
-│  │  • Source Code                                         │  │
+│  │  • Source Code (HTML, CSS, JS, Images)                 │  │
 │  │  • Dockerfile                                          │  │
 │  │  • task-definition.json                                │  │
 │  │  • .github/workflows/phoneshopdeploy.yml               │  │
 │  └────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────┘
                               │
-                              │ Trigger on push to main
+                              │ Trigger on push (excludes docs/**, readme.md)
                               ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                     GITHUB ACTIONS CI/CD                      │
 │  ┌────────────────────────────────────────────────────────┐  │
-│  │  1. Checkout Code                                      │  │
-│  │  2. Configure AWS Credentials                          │  │
-│  │  3. Login to Amazon ECR                                │  │
-│  │  4. Build Docker Image                                 │  │
-│  │  5. Tag & Push to ECR                                  │  │
-│  │  6. Update ECS Task Definition                         │  │
-│  │  7. Deploy to ECS Fargate                              │  │
-│  │  8. Wait for Service Stability                         │  │
+│  │  Step 1: Checkout Code                                 │  │
+│  │  Step 2: Configure AWS Credentials                     │  │
+│  │  Step 3: Login to Amazon ECR                           │  │
+│  │  Step 4: Build Docker Image                            │  │
+│  │  Step 5: Tag Docker Image                              │  │
+│  │  Step 6: Push Image to ECR                             │  │
+│  │  Step 7: Render ECS Task Definition                    │  │
+│  │  Step 8: Debug Task Definition (cat output)            │  │
+│  │  Step 9: Deploy to ECS Fargate                         │  │
+│  │  Step 10: Wait for Service Stability                   │  │
 │  └────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────┘
                               │
@@ -82,9 +83,9 @@ This project demonstrates a complete DevOps workflow for deploying a containeriz
 ┌──────────────────────────────────────────────────────────────┐
 │                   AWS ELASTIC CONTAINER REGISTRY (ECR)        │
 │  ┌────────────────────────────────────────────────────────┐  │
-│  │  • Private Docker Registry                             │  │
-│  │  • Image Versioning (latest tag)                       │  │
-│  │  • Vulnerability Scanning                              │  │
+│  │  Repository: phoneshop-repo                            │  │
+│  │  Image Tag: latest                                     │  │
+│  │  Region: us-east-2                                     │  │
 │  └────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────┘
                               │
@@ -102,33 +103,22 @@ This project demonstrates a complete DevOps workflow for deploying a containeriz
 │  │  │  • Memory: 3 GB (3072 MB)                        │  │  │
 │  │  │  • Port: 80 (HTTP)                               │  │  │
 │  │  │  • Network Mode: awsvpc                          │  │  │
+│  │  │  • Platform: Linux/X86_64                        │  │  │
 │  │  └──────────────────────────────────────────────────┘  │  │
 │  └────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────┘
                               │
-                              │ Route Traffic
+                              │ Logs
                               ▼
 ┌──────────────────────────────────────────────────────────────┐
-│                  APPLICATION LOAD BALANCER (ALB)              │
+│                      AWS CLOUDWATCH LOGS                      │
 │  ┌────────────────────────────────────────────────────────┐  │
-│  │  • Health Checks                                       │  │
-│  │  • SSL/TLS Termination                                 │  │
-│  │  • Traffic Distribution                                │  │
+│  │  Log Group: /ecs/phoneshop-taskdef                     │  │
+│  │  Log Stream Prefix: ecs                                │  │
+│  │  Region: us-east-2                                     │  │
+│  │  Auto-create: Enabled                                  │  │
 │  └────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────┘
-                              │
-                              │ HTTPS/HTTP
-                              ▼
-┌──────────────────────────────────────────────────────────────┐
-│                          END USERS                            │
-└──────────────────────────────────────────────────────────────┘
-
-         ┌────────────────────────────────────────┐
-         │      AWS CLOUDWATCH LOGS               │
-         │  • Container Logs                      │
-         │  • Application Metrics                 │
-         │  • Monitoring & Alerts                 │
-         └────────────────────────────────────────┘
 ```
 
 ---
@@ -139,14 +129,11 @@ This project demonstrates a complete DevOps workflow for deploying a containeriz
 
 | Service | Purpose | Configuration |
 |---------|---------|---------------|
-| **Amazon ECR** | Container image registry | Private repository with image scanning |
-| **Amazon ECS** | Container orchestration | Fargate launch type for serverless |
+| **Amazon ECR** | Container image registry | Private repository for Docker images |
+| **Amazon ECS** | Container orchestration | Fargate launch type for serverless compute |
 | **AWS Fargate** | Serverless compute engine | 1 vCPU, 3GB RAM per task |
-| **Application Load Balancer** | Traffic distribution | HTTP/HTTPS with health checks |
-| **Amazon VPC** | Network isolation | Public/private subnets with NAT |
 | **CloudWatch Logs** | Centralized logging | Log group: `/ecs/phoneshop-taskdef` |
 | **IAM** | Access management | Task and execution roles |
-| **AWS Secrets Manager** | Secrets management | GitHub Actions credentials |
 
 ### Project Structure
 
@@ -158,15 +145,15 @@ phone-shop-app/
 │       └── phoneshopdeploy.yml        # CI/CD pipeline definition
 │
 ├── css/
-│   └── style.css                      # Application assets
+│   └── style.css                      # Application styles
 │
 ├── images/
-│   ├── download.jpg
+│   ├── download.jpg                   # Product images
 │   ├── download1.jpg
 │   └── download2.jpg
 │
 ├── js/
-│   └── script.js
+│   └── script.js                      # Application JavaScript
 │
 ├── Dockerfile                         # Container image definition
 ├── index.html                         # Application entry point
@@ -180,49 +167,62 @@ phone-shop-app/
 
 ### GitHub Actions Workflow
 
-The automated pipeline is defined in `.github/workflows/phoneshopdeploy.yml`
+**File**: `.github/workflows/phoneshopdeploy.yml`
 
-#### Pipeline Stages
+#### Workflow Configuration
 
 ```yaml
-Trigger: Push to main branch (excluding docs/**, readme.md)
+Trigger: 
+  - Push to main branch
+  - Excludes: docs/**, readme.md
+
 Runner: ubuntu-latest
 
-Stages:
-  1. Source Code Management
-     └── Checkout code from repository
+Pipeline Steps:
+  1. Checkout Code
+     └── actions/checkout@v4
   
-  2. Authentication & Authorization
-     └── Configure AWS credentials using GitHub Secrets
+  2. Configure AWS Credentials
+     └── aws-actions/configure-aws-credentials@v4
+     └── Uses GitHub Secrets for authentication
   
-  3. Container Registry Access
-     └── Authenticate Docker client with Amazon ECR
+  3. Login to Amazon ECR
+     └── aws-actions/amazon-ecr-login@v2
   
-  4. Build Phase
-     └── Build Docker image from Dockerfile
+  4. Build Docker Image
+     └── docker build -t $ECR_REPOSITORY_URI:latest .
   
-  5. Image Management
-     ├── Tag image with ECR repository URI
-     └── Push image to Amazon ECR
+  5. Tag Docker Image
+     └── docker tag $ECR_REPOSITORY_URI:latest
   
-  6. Deployment Configuration
-     └── Render ECS task definition with new image
+  6. Push to ECR
+     └── docker push $ECR_REPOSITORY_URI:latest
   
-  7. Deployment Execution
-     ├── Deploy updated task definition to ECS
-     └── Wait for service stability (health checks)
+  7. Render ECS Task Definition
+     └── aws-actions/amazon-ecs-render-task-definition@v1
+     └── Updates task-definition.json with new image
+  
+  8. Debug Task Definition
+     └── cat rendered task definition (for troubleshooting)
+  
+  9. Deploy to ECS
+     └── aws-actions/amazon-ecs-deploy-task-definition@v2
+     └── Updates ECS service with new task definition
+  
+  10. Wait for Service Stability
+      └── Ensures deployment completes successfully
 ```
 
 #### Required GitHub Secrets
 
-Configure these secrets in your GitHub repository settings:
+Configure these in **Settings → Secrets and variables → Actions**:
 
-| Secret Name | Description | Example Value |
-|-------------|-------------|---------------|
+| Secret Name | Description | Example |
+|-------------|-------------|---------|
 | `AWS_ACCESS_KEY_ID` | AWS IAM access key | `AKIAIOSFODNN7EXAMPLE` |
-| `AWS_SECRET_ACCESS_KEY` | AWS IAM secret key | `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` |
+| `AWS_SECRET_ACCESS_KEY` | AWS IAM secret key | `wJalrXUtnFEMI/K7MDENG/...` |
 | `AWS_REGION` | AWS deployment region | `us-east-2` |
-| `ECR_REPOSITORY_URI` | Full ECR repository URI | `123456789012.dkr.ecr.us-east-2.amazonaws.com/repo-name` |
+| `ECR_REPOSITORY_URI` | Full ECR repository URI | `123456789012.dkr.ecr.us-east-2.amazonaws.com/phoneshop-repo` |
 | `CONTAINER_NAME` | ECS container name | `phoneshop-container` |
 | `ECS_SERVICE` | ECS service name | `phoneshop-service` |
 | `ECS_CLUSTER` | ECS cluster name | `phoneshop-cluster` |
@@ -230,17 +230,17 @@ Configure these secrets in your GitHub repository settings:
 #### Pipeline Features
 
 - ✅ **Automated Builds**: Triggered on every push to main branch
-- ✅ **Path Filtering**: Ignores documentation changes
-- ✅ **Zero Downtime**: Rolling deployment strategy
-- ✅ **Health Checks**: Waits for service stability before completion
-- ✅ **Debugging**: Task definition output for troubleshooting
+- ✅ **Path Filtering**: Ignores documentation changes to prevent unnecessary builds
+- ✅ **Zero Downtime**: Rolling deployment strategy with health checks
+- ✅ **Service Stability**: Waits for ECS service to stabilize before completing
+- ✅ **Debugging**: Outputs rendered task definition for troubleshooting
 - ✅ **Idempotent**: Safe to re-run without side effects
 
 ---
 
 ## 🐳 Docker Configuration
 
-### Dockerfile Analysis
+### Dockerfile
 
 ```dockerfile
 FROM nginx:alpine
@@ -248,162 +248,70 @@ COPY . /usr/share/nginx/html
 EXPOSE 80
 ```
 
-#### Container Strategy
+### Container Strategy
 
-- **Base Image**: `nginx:alpine` (lightweight, ~5MB)
-- **Web Server**: Nginx for serving static content
-- **Security**: Alpine Linux for minimal attack surface
-- **Performance**: Optimized for fast startup and low memory footprint
-- **Port**: Exposes port 80 for HTTP traffic
+| Component | Details |
+|-----------|---------|
+| **Base Image** | `nginx:alpine` - Lightweight (~5MB) |
+| **Web Server** | Nginx for serving static content |
+| **Content** | Copies all files to nginx html directory |
+| **Port** | Exposes port 80 for HTTP traffic |
+| **OS** | Alpine Linux for minimal attack surface |
 
-#### Build Process
+### Why This Approach?
 
-```bash
-# Local build
-docker build -t app-name:latest .
-
-# Multi-stage builds (optional enhancement)
-# Add build stages for optimization
-```
-
----
-
-## ☁️ AWS Infrastructure Setup
-
-### Step 1: Create ECR Repository
-
-```bash
-aws ecr create-repository \
-  --repository-name phoneshop-repo \
-  --region us-east-2 \
-  --image-scanning-configuration scanOnPush=true \
-  --encryption-configuration encryptionType=AES256
-```
-
-### Step 2: Create ECS Cluster
-
-```bash
-aws ecs create-cluster \
-  --cluster-name phoneshop-cluster \
-  --region us-east-2 \
-  --capacity-providers FARGATE FARGATE_SPOT \
-  --default-capacity-provider-strategy capacityProvider=FARGATE,weight=1
-```
-
-### Step 3: Create IAM Roles
-
-#### Task Execution Role
-
-```bash
-aws iam create-role \
-  --role-name ecsTaskExecutionRole \
-  --assume-role-policy-document file://trust-policy.json
-
-aws iam attach-role-policy \
-  --role-name ecsTaskExecutionRole \
-  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
-```
-
-#### Task Role (for application permissions)
-
-```bash
-aws iam create-role \
-  --role-name ecsTaskRole \
-  --assume-role-policy-document file://trust-policy.json
-```
-
-### Step 4: Register Task Definition
-
-```bash
-aws ecs register-task-definition \
-  --cli-input-json file://task-definition.json \
-  --region us-east-2
-```
-
-### Step 5: Create ECS Service
-
-```bash
-aws ecs create-service \
-  --cluster phoneshop-cluster \
-  --service-name phoneshop-service \
-  --task-definition phoneshop-taskdef \
-  --desired-count 1 \
-  --launch-type FARGATE \
-  --platform-version LATEST \
-  --network-configuration "awsvpcConfiguration={
-    subnets=[subnet-xxxxx,subnet-yyyyy],
-    securityGroups=[sg-xxxxx],
-    assignPublicIp=ENABLED
-  }" \
-  --load-balancers "targetGroupArn=arn:aws:elasticloadbalancing:region:account-id:targetgroup/name,containerName=phoneshop-container,containerPort=80"
-```
-
-### Step 6: Configure Application Load Balancer
-
-```bash
-# Create ALB
-aws elbv2 create-load-balancer \
-  --name phoneshop-alb \
-  --subnets subnet-xxxxx subnet-yyyyy \
-  --security-groups sg-xxxxx \
-  --scheme internet-facing \
-  --type application
-
-# Create Target Group
-aws elbv2 create-target-group \
-  --name phoneshop-tg \
-  --protocol HTTP \
-  --port 80 \
-  --vpc-id vpc-xxxxx \
-  --target-type ip \
-  --health-check-path / \
-  --health-check-interval-seconds 30
-
-# Create Listener
-aws elbv2 create-listener \
-  --load-balancer-arn arn:aws:elasticloadbalancing:region:account-id:loadbalancer/app/name \
-  --protocol HTTP \
-  --port 80 \
-  --default-actions Type=forward,TargetGroupArn=arn:aws:elasticloadbalancing:region:account-id:targetgroup/name
-```
+- **Lightweight**: Alpine-based image minimizes container size
+- **Fast Startup**: Small image size = faster pulls and deployments
+- **Security**: Minimal OS reduces attack surface
+- **Simplicity**: Single-stage build for static content
+- **Production-Ready**: Nginx is battle-tested for serving static files
 
 ---
 
-## 📊 ECS Task Definition Configuration
+## 📊 ECS Task Definition
 
-### Key Parameters
+### Configuration Overview
+
+**File**: `task-definition.json`
 
 ```json
 {
   "family": "phoneshop-taskdef",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
-  "cpu": "1024",                    // 1 vCPU
-  "memory": "3072",                 // 3 GB
-  "executionRoleArn": "arn:aws:iam::account-id:role/my-ecs-task-role",
-  "taskRoleArn": "arn:aws:iam::account-id:role/my-ecs-task-role",
-  "containerDefinitions": [
+  "cpu": "1024",
+  "memory": "3072",
+  "taskRoleArn": "arn:aws:iam::266735801381:role/my-ecs-task-role",
+  "executionRoleArn": "arn:aws:iam::266735801381:role/my-ecs-task-role"
+}
+```
+
+### Container Definition
+
+```json
+{
+  "name": "phoneshop-container",
+  "image": "266735801381.dkr.ecr.us-east-2.amazonaws.com/phoneshop-repo",
+  "cpu": 0,
+  "portMappings": [
     {
-      "name": "phoneshop-container",
-      "image": "account-id.dkr.ecr.region.amazonaws.com/phoneshop-repo:latest",
-      "portMappings": [
-        {
-          "containerPort": 80,
-          "protocol": "tcp",
-          "appProtocol": "http"
-        }
-      ],
-      "logConfiguration": {
-        "logDriver": "awslogs",
-        "options": {
-          "awslogs-group": "/ecs/phoneshop-taskdef",
-          "awslogs-region": "us-east-2",
-          "awslogs-stream-prefix": "ecs",
-          "awslogs-create-group": "true"
-        }
-      }
+      "name": "phoneshop-container-80-tcp",
+      "containerPort": 80,
+      "hostPort": 80,
+      "protocol": "tcp",
+      "appProtocol": "http"
     }
-  ]
+  ],
+  "essential": true,
+  "logConfiguration": {
+    "logDriver": "awslogs",
+    "options": {
+      "awslogs-group": "/ecs/phoneshop-taskdef",
+      "awslogs-create-group": "true",
+      "awslogs-region": "us-east-2",
+      "awslogs-stream-prefix": "ecs"
+    }
+  }
 }
 ```
 
@@ -411,10 +319,43 @@ aws elbv2 create-listener \
 
 | Resource | Value | Justification |
 |----------|-------|---------------|
-| CPU | 1024 units (1 vCPU) | Sufficient for nginx serving static content |
-| Memory | 3072 MB (3 GB) | Overhead for container runtime and caching |
-| Network Mode | awsvpc | Required for Fargate, provides ENI per task |
-| Platform | Linux/X86_64 | Standard architecture for compatibility |
+| **CPU** | 1024 units (1 vCPU) | Sufficient for nginx serving static content |
+| **Memory** | 3072 MB (3 GB) | Adequate for container runtime and caching |
+| **Network Mode** | awsvpc | Required for Fargate, provides dedicated ENI |
+| **Platform** | Linux/X86_64 | Standard architecture for compatibility |
+| **Launch Type** | FARGATE | Serverless - no EC2 instance management |
+
+### IAM Roles
+
+- **Task Role**: `my-ecs-task-role` - Permissions for the application
+- **Execution Role**: `my-ecs-task-role` - Permissions for ECS to pull images and write logs
+
+Required permissions:
+- ECR image pull (ecr:GetAuthorizationToken, ecr:BatchGetImage)
+- CloudWatch Logs write (logs:CreateLogStream, logs:PutLogEvents)
+
+---
+
+## 🚀 Deployment Workflow
+
+### How Deployment Works
+
+1. **Code Change**: Developer pushes code to main branch
+2. **Trigger**: GitHub Actions workflow starts automatically
+3. **Build**: Docker image is built from Dockerfile
+4. **Push**: Image is tagged and pushed to ECR
+5. **Update**: Task definition is updated with new image URI
+6. **Deploy**: ECS service is updated with new task definition
+7. **Rolling Update**: ECS performs zero-downtime deployment
+8. **Health Check**: Pipeline waits for service stability
+9. **Complete**: New version is live
+
+### Deployment Strategy
+
+- **Type**: Rolling update
+- **Minimum Healthy**: 100% (ensures zero downtime)
+- **Maximum**: 200% (allows new tasks before stopping old ones)
+- **Health Checks**: Service stability verification
 
 ---
 
@@ -422,148 +363,39 @@ aws elbv2 create-listener \
 
 ### CloudWatch Logs
 
-**Log Group**: `/ecs/phoneshop-taskdef`
+**Configuration**:
+- **Log Group**: `/ecs/phoneshop-taskdef`
+- **Region**: `us-east-2`
+- **Stream Prefix**: `ecs`
+- **Auto-create**: Enabled
+
+### Viewing Logs
 
 ```bash
-# View logs
-aws logs tail /ecs/phoneshop-taskdef --follow
+# View real-time logs
+aws logs tail /ecs/phoneshop-taskdef --follow --region us-east-2
 
-# Filter logs
+# Filter logs by pattern
 aws logs filter-log-events \
   --log-group-name /ecs/phoneshop-taskdef \
-  --filter-pattern "ERROR"
+  --filter-pattern "ERROR" \
+  --region us-east-2
+
+# Get logs for specific time range
+aws logs filter-log-events \
+  --log-group-name /ecs/phoneshop-taskdef \
+  --start-time 1609459200000 \
+  --end-time 1609545600000 \
+  --region us-east-2
 ```
 
-### CloudWatch Metrics
+### Key Metrics to Monitor
 
-Monitor these key metrics:
-
-- **CPUUtilization**: Container CPU usage
-- **MemoryUtilization**: Container memory usage
-- **TargetResponseTime**: ALB response time
-- **HealthyHostCount**: Number of healthy targets
-- **UnHealthyHostCount**: Number of unhealthy targets
-
-### Setting Up Alarms
-
-```bash
-aws cloudwatch put-metric-alarm \
-  --alarm-name high-cpu-utilization \
-  --alarm-description "Alert when CPU exceeds 80%" \
-  --metric-name CPUUtilization \
-  --namespace AWS/ECS \
-  --statistic Average \
-  --period 300 \
-  --threshold 80 \
-  --comparison-operator GreaterThanThreshold \
-  --evaluation-periods 2
-```
-
----
-
-## 🔒 Security Best Practices
-
-### Implemented Security Measures
-
-1. **IAM Least Privilege**
-   - Separate task execution and task roles
-   - Minimal permissions for ECR pull and CloudWatch logs
-
-2. **Secrets Management**
-   - GitHub Secrets for sensitive credentials
-   - No hardcoded credentials in code
-
-3. **Network Security**
-   - VPC isolation with security groups
-   - Private subnets for containers (optional)
-   - ALB in public subnet for internet access
-
-4. **Container Security**
-   - Alpine-based images for minimal attack surface
-   - ECR image scanning enabled
-   - Regular base image updates
-
-5. **Encryption**
-   - ECR encryption at rest (AES256)
-   - TLS/SSL for data in transit (ALB)
-
-### Security Checklist
-
-- [ ] Enable ECR image scanning
-- [ ] Implement least privilege IAM policies
-- [ ] Use AWS Secrets Manager for sensitive data
-- [ ] Enable VPC Flow Logs
-- [ ] Configure security groups with minimal ports
-- [ ] Enable CloudTrail for audit logging
-- [ ] Implement WAF rules on ALB
-- [ ] Use HTTPS with ACM certificates
-- [ ] Enable container insights
-- [ ] Regular security patching
-
----
-
-## 🚀 Deployment Guide
-
-### Prerequisites
-
-- AWS Account with appropriate permissions
-- GitHub repository
-- AWS CLI installed and configured
-- Docker installed locally (for testing)
-
-### Quick Start Deployment
-
-1. **Clone and Configure**
-   ```bash
-   git clone <repository-url>
-   cd phone-shop-app
-   ```
-
-2. **Set Up AWS Infrastructure**
-   ```bash
-   # Run infrastructure setup script
-   ./scripts/setup-infrastructure.sh
-   ```
-
-3. **Configure GitHub Secrets**
-   - Navigate to repository Settings → Secrets and variables → Actions
-   - Add all required secrets listed in [CI/CD Pipeline](#cicd-pipeline)
-
-4. **Deploy**
-   ```bash
-   git add .
-   git commit -m "Initial deployment"
-   git push origin main
-   ```
-
-5. **Verify Deployment**
-   ```bash
-   # Check service status
-   aws ecs describe-services \
-     --cluster phoneshop-cluster \
-     --services phoneshop-service
-   
-   # Get ALB DNS name
-   aws elbv2 describe-load-balancers \
-     --names phoneshop-alb \
-     --query 'LoadBalancers[0].DNSName'
-   ```
-
-### Manual Deployment (Without CI/CD)
-
-```bash
-# 1. Build and push Docker image
-aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin <account-id>.dkr.ecr.us-east-2.amazonaws.com
-docker build -t phoneshop-repo .
-docker tag phoneshop-repo:latest <account-id>.dkr.ecr.us-east-2.amazonaws.com/phoneshop-repo:latest
-docker push <account-id>.dkr.ecr.us-east-2.amazonaws.com/phoneshop-repo:latest
-
-# 2. Update ECS service
-aws ecs update-service \
-  --cluster phoneshop-cluster \
-  --service phoneshop-service \
-  --force-new-deployment
-```
+- **Task Count**: Number of running tasks
+- **CPU Utilization**: Container CPU usage
+- **Memory Utilization**: Container memory usage
+- **Deployment Status**: Success/failure of deployments
+- **Service Events**: ECS service event logs
 
 ---
 
@@ -571,64 +403,102 @@ aws ecs update-service \
 
 ### Common Issues and Solutions
 
-#### Issue: Container fails to start
+#### Issue: Pipeline fails at "Login to Amazon ECR"
 
+**Symptoms**: Authentication error when logging into ECR
+
+**Solutions**:
 ```bash
-# Check task logs
-aws logs tail /ecs/phoneshop-taskdef --follow
+# Verify AWS credentials are correct
+aws sts get-caller-identity --region us-east-2
 
-# Describe task for error details
-aws ecs describe-tasks \
-  --cluster phoneshop-cluster \
-  --tasks <task-id>
+# Check IAM user has ECR permissions
+aws iam get-user-policy --user-name <username> --policy-name ECRAccess
 ```
 
-**Solutions:**
-- Verify IAM execution role has ECR pull permissions
-- Check container image exists in ECR
-- Validate task definition CPU/memory allocation
+#### Issue: Container fails to start
 
-#### Issue: Service deployment stuck
+**Symptoms**: Task stops immediately after starting
 
+**Solutions**:
+```bash
+# Check task logs
+aws logs tail /ecs/phoneshop-taskdef --follow --region us-east-2
+
+# Describe stopped task
+aws ecs describe-tasks \
+  --cluster phoneshop-cluster \
+  --tasks <task-id> \
+  --region us-east-2
+
+# Common causes:
+# - IAM execution role lacks ECR pull permissions
+# - Container image doesn't exist in ECR
+# - Insufficient CPU/memory allocation
+```
+
+#### Issue: Deployment stuck in progress
+
+**Symptoms**: ECS service deployment doesn't complete
+
+**Solutions**:
 ```bash
 # Check service events
 aws ecs describe-services \
   --cluster phoneshop-cluster \
   --services phoneshop-service \
+  --region us-east-2 \
   --query 'services[0].events'
+
+# Common causes:
+# - Security group blocking traffic
+# - Subnet has no internet access
+# - Task definition errors
 ```
 
-**Solutions:**
-- Verify security group allows traffic on port 80
-- Check subnet has internet access (NAT Gateway or public IP)
-- Validate target group health check configuration
+#### Issue: GitHub Actions workflow fails
 
-#### Issue: GitHub Actions pipeline fails
+**Symptoms**: Pipeline fails at various steps
 
-**Solutions:**
-- Verify all GitHub Secrets are correctly configured
+**Solutions**:
+- Verify all GitHub Secrets are configured correctly
 - Check AWS credentials have necessary permissions
 - Review GitHub Actions logs for specific error messages
-- Ensure ECR repository exists before pipeline runs
+- Ensure ECR repository exists before first run
+- Validate task-definition.json syntax
 
-#### Issue: High memory utilization
+#### Issue: Cannot access application
 
+**Symptoms**: Application not reachable after deployment
+
+**Solutions**:
 ```bash
-# Check container metrics
-aws cloudwatch get-metric-statistics \
-  --namespace AWS/ECS \
-  --metric-name MemoryUtilization \
-  --dimensions Name=ServiceName,Value=phoneshop-service \
-  --start-time 2024-01-01T00:00:00Z \
-  --end-time 2024-01-02T00:00:00Z \
-  --period 3600 \
-  --statistics Average
+# Get task public IP
+aws ecs describe-tasks \
+  --cluster phoneshop-cluster \
+  --tasks <task-id> \
+  --region us-east-2 \
+  --query 'tasks[0].attachments[0].details'
+
+# Check security group allows inbound traffic on port 80
+# Verify task has public IP assigned (assignPublicIp=ENABLED)
 ```
 
-**Solutions:**
-- Increase memory allocation in task definition
-- Optimize container image size
-- Review application memory leaks
+---
+
+## 🎯 DevOps Skills Demonstrated
+
+This project showcases proficiency in:
+
+- ✅ **Container Orchestration**: ECS Fargate serverless container management
+- ✅ **CI/CD Pipelines**: GitHub Actions workflow automation
+- ✅ **Infrastructure as Code**: JSON-based ECS task definitions
+- ✅ **Containerization**: Docker image creation and optimization
+- ✅ **Cloud Services**: AWS ECR, ECS, Fargate, CloudWatch integration
+- ✅ **Monitoring & Logging**: CloudWatch Logs configuration
+- ✅ **Security**: IAM roles and GitHub Secrets management
+- ✅ **Automation**: End-to-end deployment automation
+- ✅ **Troubleshooting**: Debugging containerized applications in AWS
 
 ---
 
@@ -638,6 +508,7 @@ aws cloudwatch get-metric-statistics \
 - [Amazon ECS Developer Guide](https://docs.aws.amazon.com/ecs/)
 - [AWS Fargate Documentation](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/AWS_Fargate.html)
 - [Amazon ECR User Guide](https://docs.aws.amazon.com/ecr/)
+- [CloudWatch Logs Documentation](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/)
 
 ### GitHub Actions
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
@@ -645,36 +516,14 @@ aws cloudwatch get-metric-statistics \
 
 ### Docker
 - [Docker Documentation](https://docs.docker.com/)
-- [Dockerfile Best Practices](https://docs.docker.com/develop/dev-best-practices/)
-
----
-
-## 🎯 DevOps Skills Demonstrated
-
-This project showcases proficiency in:
-
-- ✅ **Container Orchestration**: ECS Fargate serverless container management
-- ✅ **CI/CD Pipelines**: GitHub Actions automation
-- ✅ **Infrastructure as Code**: JSON-based task definitions
-- ✅ **Cloud Architecture**: AWS multi-service integration
-- ✅ **Containerization**: Docker image creation and optimization
-- ✅ **Monitoring & Logging**: CloudWatch integration
-- ✅ **Security**: IAM, secrets management, network isolation
-- ✅ **Automation**: End-to-end deployment automation
-- ✅ **Troubleshooting**: Debugging containerized applications
+- [Nginx Docker Official Image](https://hub.docker.com/_/nginx)
 
 ---
 
 ## 📝 License
 
-This project is licensed under the MIT License - free to use as a template for your own projects.
+This project is open source and available as a template for your own projects.
 
 ---
 
-## 🤝 Contributing
-
-This is a template project. Feel free to fork and customize for your needs.
-
----
-
-**Built for DevOps Engineers | AWS + Docker + GitHub Actions**
+**Built for DevOps Engineers | AWS ECS Fargate + Docker + GitHub Actions**
